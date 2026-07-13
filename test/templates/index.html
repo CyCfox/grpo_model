@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory-R1 Inference Demo</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1a1a2e; color: #e0e0e0; height: 100vh; overflow: hidden;
+    display: grid;
+    grid-template-rows: 1fr auto;
+}
+#main { display: grid; grid-template-columns: 2fr 1.5fr 1.5fr; gap: 1px; overflow: hidden; }
+.panel { display: flex; flex-direction: column; overflow: hidden; background: #16213e; }
+.panel-header {
+    background: #0f3460; padding: 10px 16px; font-weight: 600; font-size: 14px;
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+}
+.panel-header .icon { font-size: 18px; }
+.panel-body { flex: 1; overflow-y: auto; padding: 12px; }
+
+/* Chat panel */
+.chat-msg { margin-bottom: 14px; display: flex; flex-direction: column; }
+.chat-msg.user { align-items: flex-end; }
+.chat-msg.assistant { align-items: flex-start; }
+.chat-bubble {
+    max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 13px;
+    line-height: 1.5; word-break: break-word; white-space: pre-wrap;
+}
+.chat-msg.user .chat-bubble { background: #1a73e8; color: #fff; border-bottom-right-radius: 4px; }
+.chat-msg.assistant .chat-bubble { background: #2d3748; color: #e2e8f0; border-bottom-left-radius: 4px; }
+.chat-time { font-size: 10px; color: #888; margin-top: 2px; padding: 0 4px; }
+
+/* Operation panel */
+.op-card {
+    background: #1e2d4a; border: 1px solid #2a3f5f; border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 10px; font-size: 12px;
+}
+.op-card .op-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.op-badge {
+    padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 11px;
+    color: #fff; text-transform: uppercase;
+}
+.op-badge.ADD { background: #2e7d32; }
+.op-badge.UPDATE { background: #e65100; }
+.op-badge.DELETE { background: #c62828; }
+.op-badge.NONE { background: #546e7a; }
+.op-fact { color: #90a4ae; margin-bottom: 6px; font-style: italic; }
+.op-json {
+    background: #101a2e; border-radius: 4px; padding: 8px; font-family: 'Consolas', monospace;
+    font-size: 11px; color: #a5d6a7; overflow-x: auto; white-space: pre-wrap;
+    max-height: 120px; overflow-y: auto;
+}
+.op-status { font-size: 11px; margin-top: 4px; }
+.op-status.ok { color: #66bb6a; }
+.op-status.fail { color: #ef5350; }
+
+/* Memory panel */
+.mem-entry {
+    background: #1e2d4a; border: 1px solid #2a3f5f; border-radius: 6px;
+    padding: 8px 10px; margin-bottom: 6px; font-size: 12px;
+    display: flex; gap: 8px; align-items: flex-start;
+}
+.mem-id { color: #64b5f6; font-family: 'Consolas', monospace; font-size: 11px; white-space: nowrap; }
+.mem-event {
+    padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: 700;
+    color: #fff; white-space: nowrap;
+}
+.mem-event.ADD { background: #2e7d32; }
+.mem-event.UPDATE { background: #e65100; }
+.mem-event.DELETE { background: #c62828; }
+.mem-event.NONE { background: #546e7a; }
+.mem-text { flex: 1; color: #b0bec5; line-height: 1.4; }
+.mem-empty { color: #546e7a; text-align: center; padding: 40px 0; font-size: 13px; }
+
+/* Bottom bar */
+#input-bar {
+    display: flex; gap: 10px; padding: 12px 16px; background: #0d1b36; align-items: center;
+}
+#input-bar textarea {
+    flex: 1; background: #16213e; border: 1px solid #2a3f5f; border-radius: 8px;
+    padding: 10px 14px; color: #e0e0e0; font-size: 13px; resize: none;
+    font-family: inherit; outline: none; height: 44px; max-height: 120px;
+}
+#input-bar textarea:focus { border-color: #1a73e8; }
+.btn {
+    padding: 10px 20px; border: none; border-radius: 8px; font-size: 13px;
+    font-weight: 600; cursor: pointer; transition: background 0.2s;
+}
+.btn-send { background: #1a73e8; color: #fff; }
+.btn-send:hover { background: #1557b0; }
+.btn-send:disabled { background: #3a5070; cursor: not-allowed; }
+.btn-reset { background: #2d3748; color: #ccc; }
+.btn-reset:hover { background: #c62828; color: #fff; }
+
+/* Spinner */
+.spinner {
+    display: inline-block; width: 16px; height: 16px; border: 2px solid #fff3;
+    border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Toast */
+.toast {
+    position: fixed; top: 16px; right: 16px; padding: 10px 20px; border-radius: 8px;
+    font-size: 13px; z-index: 1000; animation: fadeOut 3s forwards;
+}
+.toast.error { background: #c62828; color: #fff; }
+.toast.info { background: #1a73e8; color: #fff; }
+@keyframes fadeOut { 0%,70% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0d1b36; }
+::-webkit-scrollbar-thumb { background: #2a3f5f; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3a5070; }
+</style>
+</head>
+<body>
+
+<div id="main">
+    <!-- Left: Chat -->
+    <div class="panel">
+        <div class="panel-header">
+            <span class="icon">💬</span> Chat (DeepSeek)
+        </div>
+        <div class="panel-body" id="chat-panel">
+            <div style="text-align:center;color:#546e7a;padding:40px 0;font-size:13px">
+                Send a message to start chatting.<br>
+            </div>
+        </div>
+    </div>
+
+    <!-- Middle: Operations -->
+    <div class="panel">
+        <div class="panel-header">
+            <span class="icon">🧠</span> Memory Operations (Model)
+        </div>
+        <div class="panel-body" id="op-panel">
+            <div style="text-align:center;color:#546e7a;padding:40px 0;font-size:13px">
+                Model outputs will appear here.
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Memory Bank -->
+    <div class="panel">
+        <div class="panel-header">
+            <span class="icon">📦</span> Memory Bank (<span id="mem-count">0</span>)
+        </div>
+        <div class="panel-body" id="mem-panel">
+            <div class="mem-empty" id="mem-empty">Memory bank is empty.</div>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom Input -->
+<div id="input-bar">
+    <textarea id="user-input" placeholder="Type your message here..." rows="1"
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
+    <button class="btn btn-send" id="btn-send" onclick="sendMessage()">Send</button>
+    <button class="btn btn-reset" onclick="resetAll()">Reset</button>
+</div>
+
+<script>
+// ===== State =====
+let isLoading = false;
+
+// ===== Init =====
+document.addEventListener('DOMContentLoaded', () => {
+    loadMemory();
+    document.getElementById('user-input').focus();
+});
+
+// ===== API Calls =====
+async function loadMemory() {
+    try {
+        const res = await fetch('/memory');
+        const data = await res.json();
+        renderMemory(data.memory || []);
+    } catch (e) {
+        console.error('Failed to load memory:', e);
+    }
+}
+
+async function sendMessage() {
+    if (isLoading) return;
+    const input = document.getElementById('user-input');
+    const message = input.value.trim();
+    if (!message) return;
+
+    isLoading = true;
+    const btn = document.getElementById('btn-send');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    // Show user message immediately
+    appendChatMessage('user', message);
+
+    input.value = '';
+    input.style.height = 'auto';
+
+    try {
+        const res = await fetch('/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message }),
+        });
+        const data = await res.json();
+
+        if (data.error) {
+            showToast(data.error, 'error');
+            return;
+        }
+
+        // AI reply
+        appendChatMessage('assistant', data.reply);
+
+        // Operation
+        appendOperation(data.fact, data.operation);
+
+        // Memory bank
+        renderMemory(data.memory || []);
+        document.getElementById('mem-count').textContent = data.memory_size || 0;
+
+    } catch (e) {
+        showToast('Request failed: ' + e.message, 'error');
+    } finally {
+        isLoading = false;
+        btn.disabled = false;
+        btn.textContent = 'Send';
+        document.getElementById('user-input').focus();
+    }
+}
+
+async function resetAll() {
+    if (!confirm('Clear all chat history and memory bank?')) return;
+    try {
+        await fetch('/reset', { method: 'POST' });
+        document.getElementById('chat-panel').innerHTML = `
+            <div style="text-align:center;color:#546e7a;padding:40px 0;font-size:13px">
+                Send a message to start chatting.
+            </div>`;
+        document.getElementById('op-panel').innerHTML = `
+            <div style="text-align:center;color:#546e7a;padding:40px 0;font-size:13px">
+                Model outputs will appear here.
+            </div>`;
+        renderMemory([]);
+        document.getElementById('mem-count').textContent = '0';
+        showToast('Memory bank cleared', 'info');
+    } catch (e) {
+        showToast('Reset failed', 'error');
+    }
+}
+
+// ===== Render =====
+function appendChatMessage(role, content) {
+    const panel = document.getElementById('chat-panel');
+    // Remove placeholder if present
+    const ph = panel.querySelector('div[style]');
+    if (ph) ph.remove();
+
+    const div = document.createElement('div');
+    div.className = `chat-msg ${role}`;
+    const now = new Date().toLocaleTimeString();
+    div.innerHTML = `
+        <div class="chat-bubble">${escapeHtml(content)}</div>
+        <div class="chat-time">${role === 'user' ? 'You' : 'AI'} · ${now}</div>`;
+    panel.appendChild(div);
+    panel.scrollTop = panel.scrollHeight;
+}
+
+function appendOperation(fact, op) {
+    const panel = document.getElementById('op-panel');
+    const ph = panel.querySelector('div[style]');
+    if (ph) ph.remove();
+
+    const event = op.event || 'NONE';
+    const badgeClass = ['ADD','UPDATE','DELETE','NONE'].includes(event) ? event : 'NONE';
+    const applied = op.applied;
+    const r2 = op.r2;
+    const rawText = op.raw_text || '(empty)';
+    const parsedJson = op.parsed_json ? JSON.stringify(op.parsed_json, null, 2) : '(parse failed)';
+
+    const card = document.createElement('div');
+    card.className = 'op-card';
+    card.innerHTML = `
+        <div class="op-header">
+            <span class="op-badge ${badgeClass}">${event}</span>
+            <span style="color:#888;font-size:11px">r2=${r2.toFixed(1)}</span>
+            <span class="op-status ${applied ? 'ok' : 'fail'}">${applied ? '✓ Applied' : '✗ Failed'}</span>
+        </div>
+        <div class="op-fact">📝 ${escapeHtml(fact || 'NONE')}</div>
+        <div class="op-json">${escapeHtml(rawText)}</div>`;
+
+    panel.appendChild(card);
+    panel.scrollTop = panel.scrollHeight;
+}
+
+function renderMemory(memories) {
+    const panel = document.getElementById('mem-panel');
+    const empty = document.getElementById('mem-empty');
+    panel.innerHTML = '';
+
+    if (!memories || memories.length === 0) {
+        panel.innerHTML = '<div class="mem-empty">Memory bank is empty.</div>';
+        document.getElementById('mem-count').textContent = '0';
+        return;
+    }
+
+    memories.forEach(mem => {
+        const event = mem.event || 'NONE';
+        const badgeClass = ['ADD','UPDATE','DELETE','NONE'].includes(event) ? event : 'NONE';
+        const div = document.createElement('div');
+        div.className = 'mem-entry';
+        div.innerHTML = `
+            <span class="mem-id">${escapeHtml(mem.id)}</span>
+            <span class="mem-event ${badgeClass}">${event}</span>
+            <span class="mem-text">${escapeHtml(mem.text)}</span>`;
+        panel.appendChild(div);
+    });
+
+    document.getElementById('mem-count').textContent = memories.length;
+}
+
+// ===== Utils =====
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showToast(msg, type) {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3100);
+}
+
+// Auto-resize textarea
+document.getElementById('user-input').addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+</script>
+</body>
+</html>

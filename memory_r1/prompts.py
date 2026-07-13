@@ -75,7 +75,7 @@ Instructions:
 1. Carefully read all provided memories.
 2. Pay attention to timestamps — if the question involves time, use the most recent relevant information.
 3. If memories contain contradictory information, prioritize the most recent memory.
-4. Answer concisely in 5-6 words or less.
+4. Answer should be concise.
 5. If the memories do not contain enough information to answer, output "Insufficient information".
 6. Output ONLY the answer, nothing else."""
 
